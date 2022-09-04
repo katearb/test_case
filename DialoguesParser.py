@@ -60,7 +60,7 @@ class DialoguesParser:
         self.goodbye_pattern = re.compile(goodbye_pattern)
         self.companies_set_pattern = re.compile('(' + ')|('.join(companies_set) + ')')
 
-        self.__tags_columns_names = ['greeting', 'manager_name',
+        self.__tags_columns_names = ['greeting', 'manager_name', 'manager_self_represented',
                                      'company_name', 'goodbye']
 
     @property
@@ -248,7 +248,7 @@ class DialoguesParser:
                 pd.DataFrame that contains columns that represent the presence of
                 one of the following tags: greeting, manager name, company name and \n
                 goodbye in each line of the given dialogues dataframe. \n
-                The shape is (number of lines in the given dataframe, 4); \n
+                The shape is (number of lines in the given dataframe, 5); \n
                 the indexes match the indexes of the corresponding lines  \n
                 in the given dataframe.
         """
@@ -267,6 +267,7 @@ class DialoguesParser:
             tags.loc[manager_speech.index, 'manager_name'] = self.__parse_name(text)
             tags.loc[manager_speech.index, 'company_name'] = self.__parse_company(text)
 
+        tags['manager_self_represented'] = [1 if name != 0 else 0 for name in tags['manager_name']]
         return tags
 
     @staticmethod
@@ -300,7 +301,7 @@ class DialoguesParser:
                 one of the following tags: greeting, manager name, company name and \n
                 goodbye in each dialogue in the given dataframe. It also provides a check
                 (columns check_passed) on having both obligatory parts: greeting and goodbye.\n
-                The shape is (number of dialogues in the given dataframe, 5).
+                The shape is (number of dialogues in the given dataframe, 6).
         """
 
         if not tagged:
