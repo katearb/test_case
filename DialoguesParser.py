@@ -2,14 +2,14 @@ from typing import List
 
 import pandas as pd
 import re
-from yargy import Parser, rule, or_
-from yargy.predicates import gram
 from yargy.pipelines import morph_pipeline
 from yargy.interpretation import fact
+from yargy import Parser, rule, or_
+from yargy.predicates import gram
 
 GREETING_PATTERN = 'здравствуйте|(с )?добр(ый|ое|ым) (день|вечер|утром?)|привет(ствую)?'
-GOODBYE_PATTERN = '(до (свидания|скорого))|(все(го)? (добро(го)?|хорош(о|его)))|' + \
-                  '((добро(го)?|хорош(о|его)) (дня|вечера)?)|(пока)'
+GOODBYE_PATTERN = '(до (свидания|скорого))|(всего (доброго|хорошего))|((доброго|хорошего) (дня|вечера))|(пока)'
+COMPANIES_SET = {'диджитал бизнес'}
 
 
 class DialoguesParser:
@@ -38,7 +38,8 @@ class DialoguesParser:
     """
 
     def __init__(self, greeting_pattern: str = GREETING_PATTERN,
-                 goodbye_pattern: str = GOODBYE_PATTERN):
+                 goodbye_pattern: str = GOODBYE_PATTERN,
+                 companies_set=COMPANIES_SET):
         """
         Attributes
         ----------
@@ -46,6 +47,8 @@ class DialoguesParser:
             regex pattern for greetings extraction
         goodbye_pattern : str
             regex pattern for goodbye extraction
+        companies_set: set
+            set of possible companies
         """
 
         # yargi parsers
@@ -55,16 +58,17 @@ class DialoguesParser:
         # regex patterns
         self.greeting_pattern = re.compile(greeting_pattern)
         self.goodbye_pattern = re.compile(goodbye_pattern)
+        self.companies_set_pattern = re.compile('(' + ')|('.join(companies_set) + ')')
 
         self.__tags_columns_names = ['greeting', 'manager_name',
                                      'company_name', 'goodbye']
 
     @property
     def get_tags_columns_names(self) -> List:
-        """Get tags_columns_names"""
-
+        """
+        Get tags_columns_names"
+        """
         return self.__tags_columns_names
-
     @staticmethod
     def __create_name_parser():
         """
@@ -135,7 +139,6 @@ class DialoguesParser:
 
             if greeting:
                 result.append(1)
-                break
             else:
                 result.append(0)
 
@@ -152,7 +155,7 @@ class DialoguesParser:
                           in a particular dialogue
 
         Return:
-          pd.Series that contains in each row 1 if a manager name was extracted there,
+          pd.Series that contains in each row manager name if it was extracted there,
           0 otherwise; the indexes match the indexes of the corresponding lines
           in manager_speech.
         """
@@ -161,14 +164,19 @@ class DialoguesParser:
         for line in manager_speech:
             name = self.name_parser.find(line)
             if name:
-                result.append(1)
-                break
+                result.append(name.fact.name)
             else:
                 result.append(0)
 
         result.extend([0] * (len(manager_speech) - len(result)))
 
         return pd.Series(result, index=manager_speech.index)
+
+    def __look_up_in_dict(self, line: str) -> List:
+        """
+        Searches for known company names
+        """
+        return re.findall(self.companies_set_pattern, line)
 
     def __parse_company(self, manager_speech: pd.Series) -> pd.Series:
         """
@@ -179,17 +187,22 @@ class DialoguesParser:
                           in a particular dialogue
 
         Return:
-          pd.Series that contains in each row 1 if a company name was extracted there, \n
+          pd.Series that contains in each row a company name if it was extracted there, \n
           0 otherwise; the indexes match the indexes of the corresponding lines \n
           in manager_speech.
         """
 
         result = []
         for line in manager_speech:
+            name = self.__look_up_in_dict(line)
+
+            if name:
+                result.append(name[0])
+                continue
+
             name = self.company_parser.find(line)
             if name:
-                result.append(1)
-                break
+                result.append(name.fact.name)
             else:
                 result.append(0)
         result.extend([0] * (len(manager_speech) - len(result)))
@@ -210,15 +223,14 @@ class DialoguesParser:
         """
 
         result = []
-        for line in manager_speech[::-1]:  # goodbye is expected in the end of the speech
+        for line in manager_speech:
             goodbye = re.search(self.goodbye_pattern, line)
 
             if goodbye:
                 result.append(1)
-                break
             else:
                 result.append(0)
-        result = [0] * (len(manager_speech) - len(result)) + result
+        result.extend([0] * (len(manager_speech) - len(result)))
 
         return pd.Series(result, index=manager_speech.index)
 
@@ -257,6 +269,19 @@ class DialoguesParser:
 
         return tags
 
+    @staticmethod
+    def __add_name_attribute(report: pd.DataFrame,
+                             tagged_dialogues: pd.DataFrame,
+                             col: str) -> pd.DataFrame:
+        """
+        Creates columns with names for report
+        """
+        get_names = tagged_dialogues.groupby('dlg_id')[col].apply(lambda x: x != 0)
+        names = tagged_dialogues[['dlg_id', col]][get_names]
+        names.drop_duplicates(inplace=True)
+        report = report.merge(names, on='dlg_id', how='left')
+        return report
+
     def get_reports_for_dialogues(self, dialogues: pd.DataFrame,
                                   tagged: bool = False) -> pd.DataFrame:
         """
@@ -284,7 +309,16 @@ class DialoguesParser:
         else:
             tagged_dialogues = dialogues[['dlg_id'] + self.__tags_columns_names]
 
+        # create report
         report = tagged_dialogues.groupby('dlg_id')[self.__tags_columns_names].sum()
+
+        # add manager name
+        report = self.__add_name_attribute(report, tagged_dialogues, 'manager_name')
+
+        # add company name
+        report = self.__add_name_attribute(report, tagged_dialogues, 'company_name')
+
+        # add check on requirements
         check_passed = report[['greeting', 'goodbye']].all(axis=1)
         report['check_passed'] = pd.Series(check_passed, dtype=int)
 
