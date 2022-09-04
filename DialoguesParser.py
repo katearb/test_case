@@ -297,9 +297,9 @@ class DialoguesParser:
                   otherwise the function will invoke extract().
 
         Return:
-                pd.DataFrame that contains columns that represent the presence of
-                one of the following tags: greeting, manager name, company name and \n
-                goodbye in each dialogue in the given dataframe. It also provides a check
+                pd.DataFrame contains columns which represent the number of lines where
+                each tag (greeting, manager name, manager_self_represented, company name and \n
+                goodbye) was presented for each dialogue in the given dataframe. It also provides a check
                 (columns check_passed) on having both obligatory parts: greeting and goodbye.\n
                 The shape is (number of dialogues in the given dataframe, 6).
         """
