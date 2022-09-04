@@ -2,7 +2,6 @@ import pandas as pd
 from DialoguesParser import DialoguesParser
 
 if __name__ == '__main__':
-
     # load the data
     data = pd.read_csv(r'.\data\test_data.csv')
 
