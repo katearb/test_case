@@ -66,9 +66,10 @@ class DialoguesParser:
     @property
     def get_tags_columns_names(self) -> List:
         """
-        Get tags_columns_names"
+        Get tags_columns_names
         """
         return self.__tags_columns_names
+
     @staticmethod
     def __create_name_parser():
         """
